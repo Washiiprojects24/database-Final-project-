@@ -16,3 +16,59 @@ CREATE TABLE Addresses (
     postal_code VARCHAR(20),
     FOREIGN KEY (contact_id) REFERENCES Contacts(id)
 );
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import mysql.connector
+
+app = FastAPI()
+
+# Database Connection
+db = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="your_password",
+    database="ContactDB"
+)
+cursor = db.cursor(dictionary=True)
+
+# Models
+class Contact(BaseModel):
+    name: str
+    email: str
+    phone: str | None = None
+
+@app.post("/contacts")
+def create_contact(contact: Contact):
+    try:
+        cursor.execute("INSERT INTO Contacts (name, email, phone) VALUES (%s, %s, %s)",
+                       (contact.name, contact.email, contact.phone))
+        db.commit()
+        return {"message": "Contact created!"}
+    except mysql.connector.Error as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+@app.get("/contacts")
+def read_contacts():
+    cursor.execute("SELECT * FROM Contacts")
+    return cursor.fetchall()
+
+@app.get("/contacts/{contact_id}")
+def read_contact(contact_id: int):
+    cursor.execute("SELECT * FROM Contacts WHERE id = %s", (contact_id,))
+    contact = cursor.fetchone()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    return contact
+
+@app.put("/contacts/{contact_id}")
+def update_contact(contact_id: int, contact: Contact):
+    cursor.execute("UPDATE Contacts SET name=%s, email=%s, phone=%s WHERE id=%s",
+                   (contact.name, contact.email, contact.phone, contact_id))
+    db.commit()
+    return {"message": "Contact updated"}
+
+@app.delete("/contacts/{contact_id}")
+def delete_contact(contact_id: int):
+    cursor.execute("DELETE FROM Contacts WHERE id=%s", (contact_id,))
+    db.commit()
+    return {"message": "Contact deleted"}
